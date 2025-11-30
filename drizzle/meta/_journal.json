@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1763694161896,
+      "tag": "0000_grey_zeigeist",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1763694219866,
+      "tag": "0001_warm_redwing",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1763695194809,
+      "tag": "0002_ordinary_brother_voodoo",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1764299960284,
+      "tag": "0003_silent_hemingway",
+      "breakpoints": true
+    }
+  ]
+}
