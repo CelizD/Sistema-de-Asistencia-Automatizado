@@ -12,6 +12,8 @@ import Monitoring from "./pages/Monitoring";
 import Statistics from "./pages/Statistics";
 import Rooms from "./pages/Rooms";
 import Logs from "./pages/Logs";
+import AdminUsers from "@/pages/AdminUsers";
+import Schedules from "@/pages/Schedules";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -51,7 +53,16 @@ function Router() {
           <Logs />
         </DashboardLayout>
       )} />
-      
+      <Route path="/users" component={() => (
+        <DashboardLayout>
+          <AdminUsers />
+        </DashboardLayout>
+      )} />
+      <Route path="/schedules" component={() => (
+        <DashboardLayout>
+          <Schedules />
+        </DashboardLayout>
+      )} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

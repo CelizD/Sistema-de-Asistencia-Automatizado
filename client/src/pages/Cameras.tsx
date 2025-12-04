@@ -7,9 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { Camera, Plus, Trash2, Edit, Video, AlertCircle } from "lucide-react";
+import { Plus, Trash2, Edit, Video, AlertCircle, Lock } from "lucide-react";
 import { useState } from "react";
-import { Link } from "wouter";
 import { toast } from "sonner";
 
 export default function Cameras() {
@@ -17,12 +16,16 @@ export default function Cameras() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingCamera, setEditingCamera] = useState<any>(null);
+  
+  // Estado para el formulario de crear
   const [formData, setFormData] = useState({
     name: "",
     streamUrl: "",
     location: "",
     cameraType: "IP",
     roomId: null as number | null,
+    username: "",
+    password: ""
   });
 
   const utils = trpc.useUtils();
@@ -33,7 +36,7 @@ export default function Cameras() {
     onSuccess: () => {
       utils.cameras.list.invalidate();
       setIsAddDialogOpen(false);
-      setFormData({ name: "", streamUrl: "", location: "", cameraType: "IP", roomId: null });
+      setFormData({ name: "", streamUrl: "", location: "", cameraType: "IP", roomId: null, username: "", password: "" });
       toast.success("Cámara agregada exitosamente");
     },
     onError: (error) => {
@@ -63,32 +66,29 @@ export default function Cameras() {
     },
   });
 
-  if (loading || isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
+  if (loading || isLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+    </div>
+  );
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-4">
-        <div className="text-center space-y-4">
-          <AlertCircle className="w-16 h-16 mx-auto text-destructive" />
-          <h1 className="text-2xl font-bold">Acceso Restringido</h1>
-          <p className="text-muted-foreground">Debes iniciar sesión para acceder a esta página</p>
-          <Button asChild>
-            <a href={getLoginUrl()}>Iniciar Sesión</a>
-          </Button>
-        </div>
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
+        <AlertCircle className="w-16 h-16 text-destructive" />
+        <h1 className="text-2xl font-bold">Acceso Restringido</h1>
+        <Button asChild><a href={getLoginUrl()}>Iniciar Sesión</a></Button>
       </div>
     );
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    createMutation.mutate(formData);
+    // CORRECCIÓN 1: Convertimos null a undefined explícitamente
+    createMutation.mutate({
+      ...formData,
+      roomId: formData.roomId ?? undefined
+    });
   };
 
   const handleEdit = (camera: any) => {
@@ -99,6 +99,18 @@ export default function Cameras() {
   const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCamera) return;
+    
+    // Lógica para manejar roomId opcional
+    let roomIdValue: number | undefined = undefined;
+    
+    // Si no es "none" y tiene valor, intentamos convertirlo
+    if (editingCamera.roomId !== "none" && editingCamera.roomId !== null && editingCamera.roomId !== undefined) {
+       const parsed = Number(editingCamera.roomId);
+       if (!isNaN(parsed)) {
+         roomIdValue = parsed;
+       }
+    }
+
     updateMutation.mutate({
       id: editingCamera.id,
       name: editingCamera.name,
@@ -106,31 +118,15 @@ export default function Cameras() {
       location: editingCamera.location,
       status: editingCamera.status,
       cameraType: editingCamera.cameraType,
+      roomId: roomIdValue, // Aquí pasamos undefined o number
+      username: editingCamera.username,
+      password: editingCamera.password
     });
   };
 
   const handleDelete = (id: number, name: string) => {
     if (confirm(`¿Estás seguro de eliminar la cámara "${name}"?`)) {
       deleteMutation.mutate({ id });
-    }
-  };
-
-  const getStatusColor = (status: string | null) => {
-    switch (status) {
-      case "active": return "text-green-500";
-      case "inactive": return "text-yellow-500";
-      case "error": return "text-red-500";
-      default: return "text-gray-500";
-    }
-  };
-
-  const getStatusLabel = (status: string | null) => {
-    if (!status) return "Desconocido";
-    switch (status) {
-      case "active": return "Activa";
-      case "inactive": return "Inactiva";
-      case "error": return "Error";
-      default: return status;
     }
   };
 
@@ -141,251 +137,226 @@ export default function Cameras() {
           <h1 className="text-3xl font-bold tracking-tight">Gestión de Cámaras</h1>
           <p className="text-muted-foreground">Administra las cámaras IP del sistema</p>
         </div>
-        <div>
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Agregar Cámara
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="bg-popover text-popover-foreground">
-                <form onSubmit={handleSubmit}>
-                  <DialogHeader>
-                    <DialogTitle>Agregar Nueva Cámara</DialogTitle>
-                    <DialogDescription>
-                      Ingresa los datos de la cámara IP que deseas agregar al sistema
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="name">Nombre</Label>
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        placeholder="Ej: Cámara Aula 101"
-                        required
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="streamUrl">URL del Stream</Label>
-                      <Input
-                        id="streamUrl"
-                        value={formData.streamUrl}
-                        onChange={(e) => setFormData({ ...formData, streamUrl: e.target.value })}
-                        placeholder="rtsp://192.168.1.100:554/stream"
-                        required
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="location">Ubicación</Label>
-                      <Input
-                        id="location"
-                        value={formData.location}
-                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                        placeholder="Ej: Edificio A - Piso 1"
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="cameraType">Tipo de Cámara</Label>
-                      <Input
-                        id="cameraType"
-                        value={formData.cameraType}
-                        onChange={(e) => setFormData({ ...formData, cameraType: e.target.value })}
-                        placeholder="IP"
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="roomId">Sala Asignada (Opcional)</Label>
-                      <Select
-                        value={formData.roomId?.toString() || "none"}
-                        onValueChange={(value) => setFormData({ ...formData, roomId: value === "none" ? null : parseInt(value) })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar sala" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Sin sala asignada</SelectItem>
-                          {rooms?.map((room) => (
-                            <SelectItem key={room.id} value={room.id.toString()}>
-                              {room.name} ({room.capacity} sillas)
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button type="submit" disabled={createMutation.isPending}>
-                      {createMutation.isPending ? "Agregando..." : "Agregar Cámara"}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-        </div>
-      </div>
-
-      {!cameras || cameras.length === 0 ? (
-          <Card className="bg-card text-card-foreground">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <Camera className="w-16 h-16 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No hay cámaras registradas</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Comienza agregando tu primera cámara al sistema
-              </p>
-              <Button onClick={() => setIsAddDialogOpen(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Agregar Primera Cámara
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {cameras.map((camera) => (
-              <Card key={camera.id} className="bg-card text-card-foreground">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      <Video className="w-5 h-5 text-primary" />
-                      <CardTitle className="text-lg">{camera.name}</CardTitle>
-                    </div>
-                    <span className={`text-xs font-semibold ${getStatusColor(camera.status)}`}>
-                      {getStatusLabel(camera.status)}
-                    </span>
-                  </div>
-                  <CardDescription>{camera.location || "Sin ubicación"}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Tipo:</span>{" "}
-                      <span className="font-medium">{camera.cameraType}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">URL:</span>{" "}
-                      <span className="font-mono text-xs break-all">{camera.streamUrl}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Creada:</span>{" "}
-                      <span>{new Date(camera.createdAt).toLocaleDateString('es-ES')}</span>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => handleEdit(camera)}
-                    >
-                      <Edit className="w-4 h-4 mr-1" />
-                      Editar
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleDelete(camera.id, camera.name)}
-                      disabled={deleteMutation.isPending}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-
-        {editingCamera && (
-          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-            <DialogContent className="bg-popover text-popover-foreground">
-              <form onSubmit={handleUpdate}>
-                <DialogHeader>
-                  <DialogTitle>Editar Cámara</DialogTitle>
-                  <DialogDescription>
-                    Modifica los datos de la cámara
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
+        
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              Agregar Cámara
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg bg-popover text-popover-foreground">
+            <form onSubmit={handleSubmit}>
+              <DialogHeader>
+                <DialogTitle>Agregar Nueva Cámara</DialogTitle>
+                <DialogDescription>Configura la conexión RTSP/HTTP</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="name">Nombre</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Ej: Aula 101 - Principal"
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="streamUrl">URL del Stream (Sin credenciales)</Label>
+                  <Input
+                    id="streamUrl"
+                    value={formData.streamUrl}
+                    onChange={(e) => setFormData({ ...formData, streamUrl: e.target.value })}
+                    placeholder="rtsp://192.168.1.100:554/live/ch1"
+                    required
+                  />
+                </div>
+                
+                {/* === CAMPOS DE CREDENCIALES === */}
+                <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="edit-name">Nombre</Label>
+                    <Label htmlFor="username">Usuario (Opcional)</Label>
                     <Input
-                      id="edit-name"
-                      value={editingCamera.name}
-                      onChange={(e) => setEditingCamera({ ...editingCamera, name: e.target.value })}
-                      required
+                      id="username"
+                      value={formData.username}
+                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                      placeholder="admin"
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="edit-streamUrl">URL del Stream</Label>
+                    <Label htmlFor="password">Contraseña (Opcional)</Label>
                     <Input
-                      id="edit-streamUrl"
-                      value={editingCamera.streamUrl}
-                      onChange={(e) => setEditingCamera({ ...editingCamera, streamUrl: e.target.value })}
-                      required
+                      id="password"
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      placeholder="••••••"
                     />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="edit-location">Ubicación</Label>
-                    <Input
-                      id="edit-location"
-                      value={editingCamera.location || ""}
-                      onChange={(e) => setEditingCamera({ ...editingCamera, location: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="edit-status">Estado</Label>
-                    <Select
-                      value={editingCamera.status}
-                      onValueChange={(value) => setEditingCamera({ ...editingCamera, status: value })}
-                    >
-                      <SelectTrigger id="edit-status">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">Activa</SelectItem>
-                        <SelectItem value="inactive">Inactiva</SelectItem>
-                        <SelectItem value="error">Error</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="edit-cameraType">Tipo de Cámara</Label>
-                    <Input
-                      id="edit-cameraType"
-                      value={editingCamera.cameraType || ""}
-                      onChange={(e) => setEditingCamera({ ...editingCamera, cameraType: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="edit-roomId">Sala Asignada</Label>
-                    <Select
-                      value={editingCamera.roomId?.toString() || "none"}
-                      onValueChange={(value) => setEditingCamera({ ...editingCamera, roomId: value === "none" ? null : parseInt(value) })}
-                    >
-                      <SelectTrigger id="edit-roomId">
-                        <SelectValue placeholder="Seleccionar sala" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Sin sala asignada</SelectItem>
-                        {rooms?.map((room) => (
-                          <SelectItem key={room.id} value={room.id.toString()}>
-                            {room.name} ({room.capacity} sillas)
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   </div>
                 </div>
-                <DialogFooter>
-                  <Button type="submit" disabled={updateMutation.isPending}>
-                    {updateMutation.isPending ? "Actualizando..." : "Guardar Cambios"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+                {/* ============================ */}
+
+                <div className="grid gap-2">
+                  <Label htmlFor="roomId">Sala Asignada</Label>
+                  <Select
+                    value={formData.roomId?.toString() || "none"}
+                    onValueChange={(value) => setFormData({ ...formData, roomId: value === "none" ? null : parseInt(value) })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar sala" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin sala asignada</SelectItem>
+                      {rooms?.map((room) => (
+                        <SelectItem key={room.id} value={room.id.toString()}>
+                          {room.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="location">Ubicación Física</Label>
+                  <Input
+                    id="location"
+                    value={formData.location}
+                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                    placeholder="Ej: Edificio A - Planta Baja"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="submit" disabled={createMutation.isPending}>
+                  {createMutation.isPending ? "Agregando..." : "Guardar Cámara"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {cameras?.map((camera) => (
+          <Card key={camera.id}>
+            <CardHeader>
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-2">
+                  <Video className="w-5 h-5 text-primary" />
+                  <CardTitle className="text-lg">{camera.name}</CardTitle>
+                </div>
+                {/* CORRECCIÓN 2: Envolver el icono en un span para el title */}
+                {camera.username && (
+                  <span title="Credenciales configuradas">
+                    <Lock className="w-4 h-4 text-green-600" />
+                  </span>
+                )}
+              </div>
+              <CardDescription>{camera.location || "Sin ubicación"}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-xs font-mono bg-muted p-2 rounded truncate" title={camera.streamUrl}>
+                {camera.streamUrl}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(camera)}>
+                  <Edit className="w-4 h-4 mr-2" /> Editar
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => handleDelete(camera.id, camera.name)}>
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* DIALOGO DE EDICIÓN */}
+      {editingCamera && (
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-lg bg-popover text-popover-foreground">
+            <form onSubmit={handleUpdate}>
+              <DialogHeader>
+                <DialogTitle>Editar Cámara</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label>Nombre</Label>
+                  <Input
+                    value={editingCamera.name}
+                    onChange={(e) => setEditingCamera({ ...editingCamera, name: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>URL</Label>
+                  <Input
+                    value={editingCamera.streamUrl}
+                    onChange={(e) => setEditingCamera({ ...editingCamera, streamUrl: e.target.value })}
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Usuario</Label>
+                    <Input
+                      value={editingCamera.username || ""} 
+                      onChange={(e) => setEditingCamera({ ...editingCamera, username: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Contraseña</Label>
+                    <Input
+                      type="password"
+                      value={editingCamera.password || ""}
+                      onChange={(e) => setEditingCamera({ ...editingCamera, password: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-roomId">Sala Asignada</Label>
+                  <Select
+                    value={editingCamera.roomId?.toString() || "none"}
+                    onValueChange={(value) => setEditingCamera({ ...editingCamera, roomId: value })}
+                  >
+                    <SelectTrigger id="edit-roomId">
+                      <SelectValue placeholder="Seleccionar sala" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin sala asignada</SelectItem>
+                      {rooms?.map((room) => (
+                        <SelectItem key={room.id} value={room.id.toString()}>
+                          {room.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Estado</Label>
+                  <Select
+                    value={editingCamera.status || "active"}
+                    onValueChange={(val) => setEditingCamera({ ...editingCamera, status: val })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Activa</SelectItem>
+                      <SelectItem value="inactive">Inactiva</SelectItem>
+                      <SelectItem value="error">Error</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="submit" disabled={updateMutation.isPending}>
+                  Guardar Cambios
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

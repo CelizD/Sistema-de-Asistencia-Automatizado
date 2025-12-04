@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, or, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, 
@@ -20,7 +20,11 @@ import {
   InsertActivityLog,
   alerts,
   Alert,
-  InsertAlert
+  InsertAlert,
+  // === IMPORTACIONES AGREGADAS ===
+  schedules,
+  Schedule,
+  InsertSchedule
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -267,4 +271,71 @@ export async function deleteAlert(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(alerts).set({ isActive: 0 }).where(eq(alerts.id, id));
+}
+
+// === ALERTAS EN TIEMPO REAL ===
+
+export async function getActiveAlertsForContext(cameraId: number, roomId: number | null) {
+  const db = await getDb();
+  if (!db) return [];
+
+  if (roomId) {
+    return await db.select().from(alerts).where(
+      and(
+        eq(alerts.isActive, 1),
+        or(eq(alerts.cameraId, cameraId), eq(alerts.roomId, roomId))
+      )
+    );
+  } else {
+    return await db.select().from(alerts).where(
+      and(eq(alerts.isActive, 1), eq(alerts.cameraId, cameraId))
+    );
+  }
+}
+
+export async function triggerAlertUpdate(alertId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(alerts).set({ lastTriggered: new Date() }).where(eq(alerts.id, alertId));
+}
+
+/// === GESTIÓN DE USUARIOS ===
+export async function getAllUsers() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(users).orderBy(desc(users.createdAt));
+}
+
+export async function updateUserRole(userId: number, newRole: "admin" | "user") {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ role: newRole }).where(eq(users.id, userId));
+}
+
+export async function deleteUser(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(users).where(eq(users.id, userId));
+}
+
+// === GESTIÓN DE HORARIOS ===
+export async function getSchedulesByRoom(roomId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(schedules)
+    .where(eq(schedules.roomId, roomId))
+    .orderBy(schedules.dayOfWeek, schedules.startTime);
+}
+
+export async function createSchedule(schedule: InsertSchedule) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(schedules).values(schedule);
+  return { id: Number(result[0].insertId), ...schedule };
+}
+
+export async function deleteSchedule(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(schedules).where(eq(schedules.id, id));
 }

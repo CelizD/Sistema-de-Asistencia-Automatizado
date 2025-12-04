@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { CalendarClock } from "lucide-react"; // Importar icono
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,11 +22,12 @@ import {
 } from "@/components/ui/sidebar";
 import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Camera, Activity, TrendingUp, Building2, FileText, Bell } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Camera, Activity, TrendingUp, Building2, FileText } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
+import { NotificationBell } from "./NotificationBell"; // <--- IMPORTACIÓN NUEVA
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
@@ -34,6 +36,8 @@ const menuItems = [
   { icon: Building2, label: "Gestionar Salas", path: "/rooms" },
   { icon: TrendingUp, label: "Estadísticas", path: "/statistics" },
   { icon: FileText, label: "Logs de Actividad", path: "/logs" },
+  { icon: Users, label: "Usuarios", path: "/users" },
+  { icon: CalendarClock, label: "Horarios", path: "/schedules" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -276,21 +280,27 @@ function DashboardLayoutContent({
       </div>
 
       <SidebarInset>
-        {isMobile && (
-          <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col gap-1">
-                  <span className="tracking-tight text-foreground">
-                    {activeMenuItem?.label ?? APP_TITLE}
-                  </span>
-                </div>
-              </div>
-            </div>
+        {/* HEADER MEJORADO CON LA CAMPANA */}
+        <header className="flex h-14 items-center justify-between border-b bg-background px-4 lg:px-6 sticky top-0 z-40">
+          <div className="flex items-center gap-4">
+             {isMobile && <SidebarTrigger className="-ml-2" />}
+             {!isMobile && (
+               <div className="flex-1">
+                 <h1 className="text-lg font-semibold tracking-tight">
+                   {activeMenuItem?.label ?? APP_TITLE}
+                 </h1>
+               </div>
+             )}
           </div>
-        )}
-        <main className="flex-1 p-4">{children}</main>
+          
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+          </div>
+        </header>
+        
+        <main className="flex-1 p-4 lg:p-6 overflow-auto">
+          {children}
+        </main>
       </SidebarInset>
     </>
   );

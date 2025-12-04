@@ -33,6 +33,10 @@ export const cameras = mysqlTable("cameras", {
   name: varchar("name", { length: 255 }).notNull(),
   streamUrl: text("streamUrl").notNull(),
   location: varchar("location", { length: 255 }),
+  // === NUEVOS CAMPOS PARA CREDENCIALES ===
+  username: varchar("username", { length: 255 }), 
+  password: varchar("password", { length: 255 }),
+  // =======================================
   status: mysqlEnum("status", ["active", "inactive", "error"]).default("active"),
   cameraType: varchar("cameraType", { length: 100 }),
   roomId: int("roomId"), // Vinculación con sala
@@ -128,3 +132,19 @@ export const alerts = mysqlTable("alerts", {
 
 export type Alert = typeof alerts.$inferSelect;
 export type InsertAlert = typeof alerts.$inferInsert;
+
+/**
+ * Tabla de horarios de clases
+ */
+export const schedules = mysqlTable("schedules", {
+  id: int("id").autoincrement().primaryKey(),
+  roomId: int("roomId").notNull(),
+  subject: varchar("subject", { length: 255 }).notNull(),
+  dayOfWeek: int("dayOfWeek").notNull(), // 1=Lunes, 2=Martes...
+  startTime: varchar("startTime", { length: 5 }).notNull(), // Formato "08:00"
+  endTime: varchar("endTime", { length: 5 }).notNull(),     // Formato "09:30"
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Schedule = typeof schedules.$inferSelect;
+export type InsertSchedule = typeof schedules.$inferInsert;

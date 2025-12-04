@@ -4,10 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { AlertCircle, BarChart3, TrendingUp } from "lucide-react";
+import { AlertCircle, BarChart3, TrendingUp, Download, FileSpreadsheet, Users } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "wouter";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { toast } from "sonner";
 
 export default function Statistics() {
   const { isAuthenticated, loading } = useAuth();
@@ -15,10 +15,58 @@ export default function Statistics() {
 
   const { data: cameras, isLoading: camerasLoading } = trpc.cameras.list.useQuery();
   const { data: detections, isLoading: detectionsLoading } = trpc.detections.getByCameraId.useQuery(
-    { cameraId: selectedCameraId!, limit: 50 },
+    { cameraId: selectedCameraId!, limit: 100 },
     { enabled: selectedCameraId !== null }
   );
   const { data: allDetections } = trpc.detections.latest.useQuery({ limit: 100 });
+
+  // === FUNCIÓN DE EXPORTACIÓN ===
+  const handleExport = () => {
+    if (!detections || detections.length === 0) {
+      toast.error("No hay datos disponibles para exportar");
+      return;
+    }
+
+    try {
+      // 1. Definir cabeceras del CSV
+      const headers = ["ID", "Fecha", "Hora", "Cámara ID", "Personas", "Sillas", "Ocupación (%)"];
+      
+      // 2. Mapear datos a filas
+      const rows = detections.map(d => [
+        d.id,
+        new Date(d.timestamp).toLocaleDateString('es-ES'),
+        new Date(d.timestamp).toLocaleTimeString('es-ES'),
+        d.cameraId,
+        d.personCount,
+        d.chairCount,
+        d.occupancyRate
+      ]);
+
+      // 3. Construir el string CSV
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(r => r.join(","))
+      ].join("\n");
+
+      // 4. Crear Blob y descargar
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const fileName = `reporte_asistencia_cam${selectedCameraId}_${new Date().toISOString().split('T')[0]}.csv`;
+      
+      link.setAttribute("href", url);
+      link.setAttribute("download", fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success("Reporte generado exitosamente");
+    } catch (error) {
+      console.error(error);
+      toast.error("Error al generar el reporte");
+    }
+  };
+  // ==============================
 
   if (loading || camerasLoading) {
     return (
@@ -113,17 +161,26 @@ export default function Statistics() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Estadísticas y Reportes</h1>
           <p className="text-muted-foreground">Análisis detallado de ocupación y actividad</p>
         </div>
+        
+        {/* Botón de Exportación */}
+        {selectedCameraId && (
+          <Button onClick={handleExport} variant="outline" className="gap-2">
+            <Download className="w-4 h-4" />
+            Exportar CSV
+          </Button>
+        )}
       </div>
 
+      <div className="grid grid-cols-1 gap-6">
         <Card className="bg-card text-card-foreground">
           <CardHeader>
-            <CardTitle>Selección de Cámara</CardTitle>
-            <CardDescription>Elige una cámara para ver sus estadísticas detalladas</CardDescription>
+            <CardTitle>Selección de Fuente de Datos</CardTitle>
+            <CardDescription>Elige una cámara para visualizar sus métricas y generar reportes</CardDescription>
           </CardHeader>
           <CardContent>
             <Select
@@ -146,7 +203,7 @@ export default function Statistics() {
 
         {selectedCameraId && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card className="bg-card text-card-foreground">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Ocupación Promedio</CardTitle>
@@ -155,20 +212,20 @@ export default function Statistics() {
                 <CardContent>
                   <div className="text-2xl font-bold text-primary">{stats.avgOccupancy}%</div>
                   <p className="text-xs text-muted-foreground">
-                    Últimas {stats.totalDetections} detecciones
+                    Basado en {stats.totalDetections} registros
                   </p>
                 </CardContent>
               </Card>
 
               <Card className="bg-card text-card-foreground">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Ocupación Máxima</CardTitle>
+                  <CardTitle className="text-sm font-medium">Pico de Ocupación</CardTitle>
                   <BarChart3 className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-green-500">{stats.maxOccupancy}%</div>
                   <p className="text-xs text-muted-foreground">
-                    Pico registrado
+                    Máximo registrado
                   </p>
                 </CardContent>
               </Card>
@@ -181,15 +238,15 @@ export default function Statistics() {
                 <CardContent>
                   <div className="text-2xl font-bold text-yellow-500">{stats.minOccupancy}%</div>
                   <p className="text-xs text-muted-foreground">
-                    Valor más bajo
+                    Mínimo registrado
                   </p>
                 </CardContent>
               </Card>
 
               <Card className="bg-card text-card-foreground">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Personas Promedio</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Promedio Personas</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{stats.avgPersons}</div>
@@ -209,10 +266,10 @@ export default function Statistics() {
             ) : !detections || detections.length === 0 ? (
               <Card className="bg-card text-card-foreground">
                 <CardContent className="flex flex-col items-center justify-center py-16">
-                  <BarChart3 className="w-16 h-16 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No hay datos disponibles</h3>
+                  <FileSpreadsheet className="w-16 h-16 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">Sin datos suficientes</h3>
                   <p className="text-sm text-muted-foreground">
-                    Esta cámara no tiene detecciones registradas aún
+                    Esta cámara no tiene suficientes detecciones para generar gráficas
                   </p>
                 </CardContent>
               </Card>
@@ -220,39 +277,39 @@ export default function Statistics() {
               <>
                 <Card className="bg-card text-card-foreground">
                   <CardHeader>
-                    <CardTitle>Tendencia de Ocupación</CardTitle>
+                    <CardTitle>Historial de Ocupación</CardTitle>
                     <CardDescription>
-                      Porcentaje de ocupación a lo largo del tiempo - {selectedCamera?.name}
+                      Evolución temporal del porcentaje de ocupación - {selectedCamera?.name}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <ResponsiveContainer width="100%" height={300}>
                       <LineChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.30 0.03 250)" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis 
                           dataKey="time" 
-                          stroke="oklch(0.65 0.05 250)"
+                          stroke="hsl(var(--muted-foreground))"
                           style={{ fontSize: '12px' }}
                         />
                         <YAxis 
-                          stroke="oklch(0.65 0.05 250)"
+                          stroke="hsl(var(--muted-foreground))"
                           style={{ fontSize: '12px' }}
                         />
                         <Tooltip 
                           contentStyle={{ 
-                            backgroundColor: 'oklch(0.19 0.02 250)', 
-                            border: '1px solid oklch(0.30 0.03 250)',
+                            backgroundColor: 'hsl(var(--card))', 
+                            border: '1px solid hsl(var(--border))',
                             borderRadius: '8px',
-                            color: 'oklch(0.95 0.01 250)'
                           }}
                         />
                         <Legend />
                         <Line 
                           type="monotone" 
                           dataKey="ocupacion" 
-                          stroke="oklch(0.6 0.25 250)" 
+                          stroke="hsl(var(--primary))" 
                           strokeWidth={2}
                           name="Ocupación (%)"
+                          dot={false}
                         />
                       </LineChart>
                     </ResponsiveContainer>
@@ -261,35 +318,34 @@ export default function Statistics() {
 
                 <Card className="bg-card text-card-foreground">
                   <CardHeader>
-                    <CardTitle>Comparación Personas vs Sillas</CardTitle>
+                    <CardTitle>Análisis de Aforo</CardTitle>
                     <CardDescription>
-                      Detección de personas y sillas disponibles - {selectedCamera?.name}
+                      Comparativa entre personas detectadas y sillas disponibles
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.30 0.03 250)" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis 
                           dataKey="time" 
-                          stroke="oklch(0.65 0.05 250)"
+                          stroke="hsl(var(--muted-foreground))"
                           style={{ fontSize: '12px' }}
                         />
                         <YAxis 
-                          stroke="oklch(0.65 0.05 250)"
+                          stroke="hsl(var(--muted-foreground))"
                           style={{ fontSize: '12px' }}
                         />
                         <Tooltip 
                           contentStyle={{ 
-                            backgroundColor: 'oklch(0.19 0.02 250)', 
-                            border: '1px solid oklch(0.30 0.03 250)',
+                            backgroundColor: 'hsl(var(--card))', 
+                            border: '1px solid hsl(var(--border))',
                             borderRadius: '8px',
-                            color: 'oklch(0.95 0.01 250)'
                           }}
                         />
                         <Legend />
-                        <Bar dataKey="personas" fill="oklch(0.6 0.25 250)" name="Personas" />
-                        <Bar dataKey="sillas" fill="oklch(0.50 0.25 250)" name="Sillas" />
+                        <Bar dataKey="personas" fill="hsl(var(--primary))" name="Personas" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="sillas" fill="hsl(var(--muted))" name="Sillas Detectadas" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -302,40 +358,39 @@ export default function Statistics() {
         {hourlyData.length > 0 && (
           <Card className="bg-card text-card-foreground">
             <CardHeader>
-              <CardTitle>Distribución por Hora</CardTitle>
+              <CardTitle>Patrones de Actividad Global</CardTitle>
               <CardDescription>
-                Actividad y ocupación promedio por hora del día (todas las cámaras)
+                Promedio de ocupación por hora del día (todas las cámaras)
               </CardDescription>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={hourlyData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.30 0.03 250)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis 
                     dataKey="hora" 
-                    stroke="oklch(0.65 0.05 250)"
+                    stroke="hsl(var(--muted-foreground))"
                     style={{ fontSize: '12px' }}
                   />
                   <YAxis 
-                    stroke="oklch(0.65 0.05 250)"
+                    stroke="hsl(var(--muted-foreground))"
                     style={{ fontSize: '12px' }}
                   />
                   <Tooltip 
                     contentStyle={{ 
-                      backgroundColor: 'oklch(0.19 0.02 250)', 
-                      border: '1px solid oklch(0.30 0.03 250)',
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
                       borderRadius: '8px',
-                      color: 'oklch(0.95 0.01 250)'
                     }}
                   />
                   <Legend />
-                  <Bar dataKey="detecciones" fill="oklch(0.70 0.18 250)" name="Detecciones" />
-                  <Bar dataKey="ocupacionPromedio" fill="oklch(0.6 0.25 250)" name="Ocupación Promedio (%)" />
+                  <Bar dataKey="ocupacionPromedio" fill="hsl(var(--chart-2))" name="Ocupación Promedio (%)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
         )}
+      </div>
     </div>
   );
 }

@@ -8,16 +8,27 @@ export const APP_DESCRIPTION = "Control de asistencia en tiempo real mediante vi
 
 // Generate login URL at runtime so redirect URI reflects the current origin.
 export const getLoginUrl = () => {
-  const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
-  const appId = import.meta.env.VITE_APP_ID;
+  // === CORRECCIÓN: En modo desarrollo, simplemente volver al inicio ===
+  // Esto fuerza a que el sistema lea de nuevo tu usuario "simulado" del backend
+  if (import.meta.env.DEV) {
+    return "/"; 
+  }
+  // ===================================================================
+
+  const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL || "http://localhost:3000";
+  const appId = import.meta.env.VITE_APP_ID || "local-dev";
   const redirectUri = `${window.location.origin}/api/oauth/callback`;
   const state = btoa(redirectUri);
 
-  const url = new URL(`${oauthPortalUrl}/app-auth`);
-  url.searchParams.set("appId", appId);
-  url.searchParams.set("redirectUri", redirectUri);
-  url.searchParams.set("state", state);
-  url.searchParams.set("type", "signIn");
-
-  return url.toString();
+  try {
+    const url = new URL(`${oauthPortalUrl}/app-auth`);
+    url.searchParams.set("appId", appId);
+    url.searchParams.set("redirectUri", redirectUri);
+    url.searchParams.set("state", state);
+    url.searchParams.set("type", "signIn");
+    return url.toString();
+  } catch (e) {
+    // Fallback si la URL está mal formada
+    return "/";
+  }
 };

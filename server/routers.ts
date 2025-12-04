@@ -7,10 +7,24 @@ import { processVideoFrame } from "./videoProcessor";
 import { cameraProcessingService } from "./cameraProcessingService";
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
+  // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
+  
+  // === AUTENTICACIÓN SIMULADA (MODO DESARROLLO) ===
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    // Simular que siempre hay un usuario Admin conectado
+    me: publicProcedure.query(() => ({
+      id: 1,
+      openId: "admin-dev",
+      name: "Administrador Local",
+      email: "admin@sistema.local",
+      role: "admin" as const, // Importante: rol de admin para ver todo
+      loginMethod: "dev",
+      lastSignedIn: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })),
+    
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
@@ -18,6 +32,34 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+  }),
+  // ===============================================
+
+  // === GESTIÓN DE USUARIOS (ADMINISTRACIÓN) ===
+  users: router({
+    list: protectedProcedure.query(async () => {
+      const { getAllUsers } = await import("./db");
+      return await getAllUsers();
+    }),
+    
+    updateRole: protectedProcedure
+      .input(z.object({ 
+        userId: z.number(), 
+        role: z.enum(["admin", "user"]) 
+      }))
+      .mutation(async ({ input }) => {
+        const { updateUserRole } = await import("./db");
+        await updateUserRole(input.userId, input.role);
+        return { success: true };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const { deleteUser } = await import("./db");
+        await deleteUser(input.id);
+        return { success: true };
+      }),
   }),
 
   cameras: router({
@@ -39,7 +81,15 @@ export const appRouter = router({
     create: protectedProcedure
       .input((val: unknown) => {
         if (typeof val === "object" && val !== null && "name" in val && "streamUrl" in val) {
-          return val as { name: string; streamUrl: string; location?: string; cameraType?: string };
+          return val as { 
+            name: string; 
+            streamUrl: string; 
+            location?: string; 
+            cameraType?: string;
+            roomId?: number;
+            username?: string; // Nuevo campo opcional
+            password?: string; // Nuevo campo opcional
+          };
         }
         throw new Error("Invalid input");
       })
@@ -50,7 +100,17 @@ export const appRouter = router({
     update: protectedProcedure
       .input((val: unknown) => {
         if (typeof val === "object" && val !== null && "id" in val && typeof val.id === "number") {
-          return val as { id: number; name?: string; streamUrl?: string; location?: string; status?: "active" | "inactive" | "error"; cameraType?: string };
+          return val as { 
+            id: number; 
+            name?: string; 
+            streamUrl?: string; 
+            location?: string; 
+            status?: "active" | "inactive" | "error"; 
+            cameraType?: string;
+            roomId?: number;
+            username?: string; // Nuevo campo opcional
+            password?: string; // Nuevo campo opcional
+          };
         }
         throw new Error("Invalid input");
       })
@@ -265,7 +325,13 @@ export const appRouter = router({
         if (!camera) {
           throw new Error("Cámara no encontrada");
         }
-        await cameraProcessingService.startCamera(input.cameraId, camera.streamUrl, 60);
+        // Pasamos credenciales al iniciar la cámara
+        await cameraProcessingService.startCamera(
+          input.cameraId, 
+          camera.streamUrl, 
+          60,
+          { username: camera.username, password: camera.password }
+        );
         return { success: true };
       }),
 
@@ -289,6 +355,28 @@ export const appRouter = router({
     getAllStatus: publicProcedure.query(() => {
       return cameraProcessingService.getStatus();
     }),
+  }),
+
+  // === GESTIÓN DE HORARIOS ===
+  schedules: router({
+    getByRoom: protectedProcedure
+      .input(z.object({ roomId: z.number() }))
+      .query(async ({ input }) => {
+        const { getSchedulesByRoom } = await import("./db");
+        return await getSchedulesByRoom(input.roomId);
+      }),
+    create: protectedProcedure
+      .input(z.object({
+        roomId: z.number(),
+        subject: z.string(),
+        dayOfWeek: z.number(),
+        startTime: z.string(),
+        endTime: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const { createSchedule } = await import("./db");
+        return await createSchedule(input);
+      }),
   }),
 });
 
